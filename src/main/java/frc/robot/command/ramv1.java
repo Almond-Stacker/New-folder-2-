@@ -1,10 +1,12 @@
 package frc.robot.command;
-//https://github.com/CrossTheRoadElec/Phoenix6-Examples/tree/main/java/SwerveWithPathPlanner/src/main/java/frc/robot stupid sigma pay wall methods
+
 import java.util.function.DoubleSupplier;
 
 import com.ctre.phoenix6.mechanisms.swerve.SwerveRequest;
+import com.ctre.phoenix6.mechanisms.swerve.SwerveModule.DriveRequestType;
+import com.ctre.phoenix6.mechanisms.swerve.SwerveModule.SteerRequestType;
 
-
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj2.command.Command;
 
@@ -13,23 +15,24 @@ import frc.robot.subsystems.PhotonVision;
 import frc.robot.generated.TunerConstants;
 
 // exactly the same as the code from the photon vision website 
-public class ram extends Command{
+public class ramv1 extends Command{
     DoubleSupplier ySupplier;
     DoubleSupplier xSupplier;
     DoubleSupplier rotationSupplier;
     PhotonVision camera; 
     SwerveRequest.ApplyChassisSpeeds swerveController = new SwerveRequest.ApplyChassisSpeeds(); 
-    
+
     double desiredAngle;
     double desiredDistance; 
     double strafe; 
     double forward;
     double turn; 
-    double safteyConstant = 0.1;
+    PIDController pforward;
+    PIDController pturn;
 
     CommandSwerveDrivetrain swerve;
 
-    public ram(DoubleSupplier x, DoubleSupplier y, DoubleSupplier rotation, PhotonVision camera, CommandSwerveDrivetrain driveTrain) {
+    public ramv1(DoubleSupplier x, DoubleSupplier y, DoubleSupplier rotation, PhotonVision camera, CommandSwerveDrivetrain driveTrain) {
         this.xSupplier = x;
         this.ySupplier = y;
         this.rotationSupplier = rotation;
@@ -37,19 +40,26 @@ public class ram extends Command{
         this.swerve = driveTrain;
         this.desiredAngle = 0;
         this.desiredDistance = 0.5;
+        this.pturn = new PIDController(0,0,0);
+        this.pforward = new PIDController(0, 0,0);
+        
+        pturn.setSetpoint(desiredAngle);
+        pforward.setSetpoint(desiredDistance);
     }
 
     @Override
     public void execute() {
-        forward = -xSupplier.getAsDouble() * TunerConstants.kSpeedAt12VoltsMps;
-        strafe = -ySupplier.getAsDouble() * TunerConstants.kSpeedAt12VoltsMps;
-        turn = -rotationSupplier.getAsDouble() * TunerConstants.kSpeedAt12VoltsMps;
+        turn = (desiredAngle - camera.getYaw());
+        forward = (desiredDistance - camera.getDistance());
+        var turnSpeed = pturn.calculate(turn);
+        var driveSpeed = pforward.calculate(forward);
 
-        turn = (desiredAngle - camera.getYaw()) * TunerConstants.kSpeedAt12VoltsMps * safteyConstant;
-        forward = (desiredDistance - camera.getDistance()) * TunerConstants.kSpeedAt12VoltsMps * safteyConstant;
 
+        // questionable?
         swerve.applyRequest(() -> swerveController
-            .withSpeeds(new ChassisSpeeds(forward, strafe, turn)));
+            .withSpeeds(new ChassisSpeeds(driveSpeed, strafe, turnSpeed))
+            .withDriveRequestType(DriveRequestType.Velocity)
+            .withSteerRequestType(SteerRequestType.MotionMagic));
     }
 
     @Override
